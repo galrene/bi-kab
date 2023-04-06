@@ -1,3 +1,5 @@
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "modernize-use-auto"
 #ifndef __PROGTEST__
 #include <assert.h>
 #include <ctype.h>
@@ -19,6 +21,8 @@
 
 #endif /* __PROGTEST__ */
 
+#define MAX_HASH_SIZE EVP_MAX_MD_SIZE
+
 class CHashFinder {
 private:
     const EVP_MD * m_HashFuncType;
@@ -26,11 +30,15 @@ private:
 
     unsigned char * m_Hash;
     unsigned int m_HashLength;
+    int m_MaxHashSize;
 public:
-    CHashFinder ()
-    : m_HashFuncType ( EVP_sha256() ), m_Ctx ( NULL ), m_Hash ( NULL), m_HashLength ( 0 ) {}
+    explicit CHashFinder ( int hashSize )
+    : m_HashFuncType ( EVP_sha256() ), m_Ctx ( NULL ), m_Hash ( NULL ), m_HashLength ( 0 ), m_MaxHashSize ( hashSize ) {}
     ~CHashFinder() {
-        free();
+        if ( m_Ctx )
+            EVP_MD_CTX_free ( m_Ctx );
+        if ( m_Hash )
+            free ( m_Hash );
     }
     /**
     * Create and initialise context, initialise sha256 hashing function,
@@ -40,7 +48,7 @@ public:
     bool init ();
     /**
      * Calculate the hash from fed message.
-     * @return hash on sucess, NULL on failure
+     * @return hash on success, NULL on failure
      */
     unsigned char * final();
     /**
@@ -48,6 +56,8 @@ public:
      * @return hash on success, NULL when no hash calculated yet
      */
     unsigned char * getHash() { return m_Hash; }
+    unsigned int getHashLen() { return m_HashLength; }
+
     /**
      * Feed text to hashing function.
      * @param text
@@ -59,81 +69,63 @@ public:
      * Frees all allocated resources.
      * @return 1 success, 0 fail
      */
-    int free();
+//    int free();
 };
 
 bool CHashFinder::feed ( char * text, size_t size ) {
     // feed message to function
-    if ( ! EVP_DigestUpdate ( m_Ctx, text, size ) )
+    if ( ! EVP_DigestUpdate ( m_Ctx, text, size ) ) {
+        printf("Failed to feed the message.\n");
         return false;
+    }
     return true;
 }
 
 unsigned char * CHashFinder::final () {
     // get the hash
-    if ( ! EVP_DigestFinal_ex ( m_Ctx, m_Hash, &m_HashLength ) )
+    if ( ! EVP_DigestFinal_ex ( m_Ctx, m_Hash, &m_HashLength ) ) {
+        printf("Failed to finalize the hash.\n");
         return NULL;
+    }
     return m_Hash;
 }
 
 bool CHashFinder::init () {
     if ( m_Ctx = EVP_MD_CTX_new(); m_Ctx == NULL ) {
         printf("Context creation/initialisation failed.\n");
-        free();
         return false;
     }
     if ( ! EVP_DigestInit_ex( m_Ctx, m_HashFuncType, NULL ) ) {
         printf( "Context setup for sha256 failed.\n");
-        free();
         return false;
     }
-    m_Hash = ( unsigned char * ) malloc ( EVP_MAX_MD_SIZE );
+    m_Hash = ( unsigned char * ) calloc ( m_MaxHashSize, sizeof ( unsigned char ) );
     if ( ! m_Hash ) {
         printf( "Hash allocation failed.\n");
-        free();
         return false;
     }
 
     return true;
 }
 
-int CHashFinder::free () {
-    if ( m_Ctx )
-        EVP_MD_CTX_free ( m_Ctx );
-    if ( m_Hash )
-        OPENSSL_free ( m_Hash );
-    return 1;
-}
+bool foundMessage ( const int bits, const unsigned char * hash, const size_t hashLength ) {
+    if ( ! hash || hashLength <= 0 || bits < 0  )
+        return false;
+    if ( bits == 0 )
+        return hash[0] & 0b10000000;
 
-/**
- * 32-bit LFSR
- */
-class LFSR {
-private:
-    uint32_t m_State;
-public:
-    LFSR ( uint32_t  seed ) : m_State ( seed ) {}
-    uint32_t  next();
-};
-
-uint32_t LFSR::next () {
-    uint32_t bit = m_State & 1;
-    m_State >>= 1;
-    if (bit == 1)
-        m_State ^= 0x80000057; // XOR with a tap sequence
-    return m_State;
-}
-/**
- * Generates a pseudorandom 64 byte string without null-termination.
- * @return
- */
-char * getRandom64B () {
-    for ( int i = 0; i < 16; i++ )
-
-}
-
-bool foundMessage ( unsigned char * hash, size_t hashSize ) {
-
+    int zeroBitCounter = 0;
+    for ( size_t i = 0; i < hashLength; i++ ) {
+        unsigned char byte = hash[i];
+        for ( int j = 0; j < 8; j++ ) {
+            if ( ( byte & 0b10000000 ) == 0 )
+                zeroBitCounter++;
+            byte <<= 1;
+        }
+        if ( zeroBitCounter >= bits )
+            return true;
+    }
+    return false;
 }
 
 /**
@@ -146,21 +138,27 @@ bool foundMessage ( unsigned char * hash, size_t hashSize ) {
 int findHash (int bits, char ** message, char ** hash) {
     if ( bits < 0 || *message == NULL || *hash == NULL )
         return 0;
-    CHashFinder hf;
+    CHashFinder hf ( MAX_HASH_SIZE );
     if ( ! hf.init() )
         return 0;
 
-    char * inputString = NULL;
-    while ( ! foundMessage ( hf.getHash() ) ) {
-        uint32_t mess = lfsr.next();
-        inputString = getRandom64B();
-        if ( ! hf.feed ( iStringnput, sizeof(inputString) ) )
+    std::string initialMessage = "raz si dole hore, v pozore, vo svojom dvore, obzore, v nore, nav";
+    char * msg = ( char * ) calloc ( initialMessage.size(), sizeof ( char ) );
+    memcpy ( msg, initialMessage.c_str(), initialMessage.size() );
+
+    while ( true ) {
+        if ( ! hf.feed ( msg, initialMessage.size() ) || ! hf.final() ) {
+            free ( msg );
             return 0;
-        if ( ! hf.final() )
-            return 0;
+        }
+        if ( foundMessage ( bits, hf.getHash(), hf.getHashLen() ) )
+            break;
+        memcpy ( msg, hf.getHash() , initialMessage.size() );
     }
 
-
+    *message = msg;
+    *hash = ( char * ) calloc ( MAX_HASH_SIZE, sizeof ( char ) );
+    memcpy ( hash, ( char * ) hf.getHash(), hf.getHashLen() );
     return 1;
 }
 
@@ -199,3 +197,5 @@ int main (void) {
 }
 #endif /* __PROGTEST__ */
 
+
+#pragma clang diagnostic pop
