@@ -33,7 +33,7 @@ private:
     int m_MaxHashSize;
 public:
     explicit CHashFinder ( int hashSize )
-    : m_HashFuncType ( EVP_sha256() ), m_Ctx ( NULL ), m_Hash ( NULL ), m_HashLength ( 0 ), m_MaxHashSize ( hashSize ) {}
+    : m_HashFuncType ( EVP_sha512() ), m_Ctx ( NULL ), m_Hash ( NULL ), m_HashLength ( 0 ), m_MaxHashSize ( hashSize ) {}
     ~CHashFinder() {
         if ( m_Ctx )
             EVP_MD_CTX_free ( m_Ctx );
@@ -41,7 +41,7 @@ public:
             free ( m_Hash );
     }
     /**
-    * Create and initialise context, initialise sha256 hashing function,
+    * Create and initialise context, initialise sha512 hashing function,
     * allocate memory for hash.
     * @return 1 success, 0 fail
     */
@@ -96,7 +96,7 @@ bool CHashFinder::init () {
         return false;
     }
     if ( ! EVP_DigestInit_ex( m_Ctx, m_HashFuncType, NULL ) ) {
-        printf( "Context setup for sha256 failed.\n");
+        printf( "Context setup for sha512 failed.\n");
         return false;
     }
     m_Hash = ( unsigned char * ) calloc ( m_MaxHashSize, sizeof ( unsigned char ) );
@@ -158,7 +158,7 @@ int findHash (int bits, char ** message, char ** hash) {
 
     *message = msg;
     *hash = ( char * ) calloc ( MAX_HASH_SIZE, sizeof ( char ) );
-    memcpy ( hash, ( char * ) hf.getHash(), hf.getHashLen() );
+    memcpy ( *hash, ( char * ) hf.getHash(), hf.getHashLen() );
     return 1;
 }
 
