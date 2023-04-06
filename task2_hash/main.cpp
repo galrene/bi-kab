@@ -170,8 +170,21 @@ int findHashEx (int bits, char ** message, char ** hash, const char * hashFuncti
 
 #ifndef __PROGTEST__
 
-int checkHash(int bits, char * hexString) {
-    // DIY
+int checkHash ( int bits, char * hexString ) {
+    if ( bits == 0 )
+        return hexString[0] & 0b10000000;
+    int zeroBitCounter = 0;
+    for ( size_t i = 0; i < 64; i++ ) {
+        unsigned char byte = hexString[i];
+        for ( int j = 0; j < 8; j++ ) {
+            if ( ( byte & 0b10000000 ) == 0 )
+                zeroBitCounter++;
+            byte <<= 1;
+        }
+        if ( zeroBitCounter >= bits )
+            return true;
+    }
+
 }
 
 int main (void) {
