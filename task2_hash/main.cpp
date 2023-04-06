@@ -87,7 +87,7 @@ bool CHashFinder::init () {
         free();
         return false;
     }
-    m_Hash = ( unsigned char * ) OPENSSL_malloc ( EVP_MAX_MD_SIZE );
+    m_Hash = ( unsigned char * ) malloc ( EVP_MAX_MD_SIZE );
     if ( ! m_Hash ) {
         printf( "Hash allocation failed.\n");
         free();
@@ -106,6 +106,37 @@ int CHashFinder::free () {
 }
 
 /**
+ * 32-bit LFSR
+ */
+class LFSR {
+private:
+    uint32_t m_State;
+public:
+    LFSR ( uint32_t  seed ) : m_State ( seed ) {}
+    uint32_t  next();
+};
+
+uint32_t LFSR::next () {
+    uint32_t bit = m_State & 1;
+    m_State >>= 1;
+    if (bit == 1)
+        m_State ^= 0x80000057; // XOR with a tap sequence
+    return m_State;
+}
+/**
+ * Generates a pseudorandom 64 byte string without null-termination.
+ * @return
+ */
+char * getRandom64B () {
+    for ( int i = 0; i < 16; i++ )
+
+}
+
+bool foundMessage ( unsigned char * hash, size_t hashSize ) {
+
+}
+
+/**
  *
  * @param bits requested length of 0 prefix
  * @param message output found message
@@ -115,15 +146,24 @@ int CHashFinder::free () {
 int findHash (int bits, char ** message, char ** hash) {
     if ( bits < 0 || *message == NULL || *hash == NULL )
         return 0;
-
-    char text[] = "Text to hash";
     CHashFinder hf;
     if ( ! hf.init() )
         return 0;
 
+    char * inputString = NULL;
+    while ( ! foundMessage ( hf.getHash() ) ) {
+        uint32_t mess = lfsr.next();
+        inputString = getRandom64B();
+        if ( ! hf.feed ( iStringnput, sizeof(inputString) ) )
+            return 0;
+        if ( ! hf.final() )
+            return 0;
+    }
+
 
     return 1;
 }
+
 
 int findHashEx (int bits, char ** message, char ** hash, const char * hashFunction) {
     /* TODO or use dummy implementation */
