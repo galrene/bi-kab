@@ -21,9 +21,9 @@
 
 #endif /* __PROGTEST__ */
 
-#define MAX_HASH_SIZE EVP_MAX_MD_SIZE
+#define HASH_SIZE EVP_MAX_MD_SIZE
 
-class CHashFinder {
+class CHasher {
 private:
     const EVP_MD * m_HashFuncType;
     EVP_MD_CTX * m_Ctx;
@@ -32,9 +32,9 @@ private:
     unsigned int m_HashLength;
     int m_MaxHashSize;
 public:
-    explicit CHashFinder ( int hashSize )
+    explicit CHasher ( int hashSize )
     : m_HashFuncType ( EVP_sha512() ), m_Ctx ( NULL ), m_Hash ( NULL ), m_HashLength ( 0 ), m_MaxHashSize ( hashSize ) {}
-    ~CHashFinder() {
+    ~CHasher() {
         if ( m_Ctx )
             EVP_MD_CTX_free ( m_Ctx );
         if ( m_Hash )
@@ -72,7 +72,7 @@ public:
 //    int free();
 };
 
-bool CHashFinder::feed ( char * text, size_t size ) {
+bool CHasher::feed ( char * text, size_t size ) {
     // feed message to function
     if ( ! EVP_DigestUpdate ( m_Ctx, text, size ) ) {
         printf("Failed to feed the message.\n");
@@ -81,7 +81,7 @@ bool CHashFinder::feed ( char * text, size_t size ) {
     return true;
 }
 
-unsigned char * CHashFinder::final () {
+unsigned char * CHasher::final () {
     // get the hash
     if ( ! EVP_DigestFinal_ex ( m_Ctx, m_Hash, &m_HashLength ) ) {
         printf("Failed to finalize the hash.\n");
@@ -90,7 +90,7 @@ unsigned char * CHashFinder::final () {
     return m_Hash;
 }
 
-bool CHashFinder::init () {
+bool CHasher::init () {
     if ( m_Ctx = EVP_MD_CTX_new(); m_Ctx == NULL ) {
         printf("Context creation/initialisation failed.\n");
         return false;
@@ -127,38 +127,63 @@ bool foundMessage ( const int bits, const unsigned char * hash, const size_t has
     }
     return false;
 }
+/**
+ * Converts c string of strlen() == srcLen to a hexadecimal std::string.
+ */
+std::string convertToHex ( const char * src, size_t srcLen ) {
+    std::stringstream ss;
+    for ( int i = 0; i < srcLen; i++ )
+        ss << std::hex << std::setw(2) <<  ( unsigned int ) ( unsigned char ) src[i];
+    return ss.str();
+}
 
 /**
  *
  * @param bits requested length of 0 prefix
  * @param message output found message
  * @param hash hash of message starting with bits amount of 0's
+ * Initialise with a text and then use it's hash to quickly generate a new hash until finding one
+ * with n 0 bits.
  * @return 1 if success, 0 if failure or wrong parameters
  */
-int findHash (int bits, char ** message, char ** hash) {
+int findHash ( int bits, char ** message, char ** hash ) {
     if ( bits < 0 || *message == NULL || *hash == NULL )
         return 0;
-    CHashFinder hf ( MAX_HASH_SIZE );
+    CHasher hf ( HASH_SIZE );
     if ( ! hf.init() )
         return 0;
 
-    std::string initialMessage = "raz si dole hore, v pozore, vo svojom dvore, obzore, v nore, nav";
-    char * msg = ( char * ) calloc ( initialMessage.size(), sizeof ( char ) );
-    memcpy ( msg, initialMessage.c_str(), initialMessage.size() );
+    std::string initialMessage = "raz si dole hore, v pozore, vo svojom dvore, obzore, v nore, na";
+    char *msg = ( char * ) calloc ( HASH_SIZE, sizeof(char) ); // HASH_SIZE, because we'll use the hash as the next generated message
+    memcpy ( msg, initialMessage.c_str(), HASH_SIZE );
 
     while ( true ) {
-        if ( ! hf.feed ( msg, initialMessage.size() ) || ! hf.final() ) {
-            free ( msg );
+        if (!hf.feed(msg, HASH_SIZE) || !hf.final()) {
+            free(msg);
             return 0;
         }
         if ( foundMessage ( bits, hf.getHash(), hf.getHashLen() ) )
             break;
-        memcpy ( msg, hf.getHash() , initialMessage.size() );
+        memcpy ( msg, hf.getHash(), HASH_SIZE );
     }
 
+    std::string hexMsg = convertToHex(msg, HASH_SIZE);
+    msg = ( char * ) realloc ( msg, hexMsg.size() + 1 );
+    if ( ! msg ) {
+        free(msg);
+        return 0;
+    }
+    strncpy ( msg, hexMsg.c_str(), hexMsg.size() + 1 );
     *message = msg;
-    *hash = ( char * ) calloc ( MAX_HASH_SIZE, sizeof ( char ) );
-    memcpy ( *hash, ( char * ) hf.getHash(), hf.getHashLen() );
+
+    std::string hexHash = convertToHex(reinterpret_cast<const char *>(hf.getHash()), hf.getHashLen());
+    *hash = ( char * ) malloc ( hexHash.size() + 1 );
+    if ( ! *hash ) {
+        free(msg);
+        free(*hash);
+        return 0;
+    }
+    strncpy ( *hash, hexHash.c_str(), hexHash.size() + 1 );
     return 1;
 }
 
@@ -172,14 +197,14 @@ int findHashEx (int bits, char ** message, char ** hash, const char * hashFuncti
 
 int checkHash ( int bits, char * hexString ) {
     if ( bits == 0 )
-        return hexString[0] & 0b10000000;
+        return hexString[0] & 0b00001000;
     int zeroBitCounter = 0;
-    for ( size_t i = 0; i < 64; i++ ) {
-        unsigned char byte = hexString[i];
-        for ( int j = 0; j < 8; j++ ) {
-            if ( ( byte & 0b10000000 ) == 0 )
+    for ( size_t i = 0; i < 128; i++ ) {
+        unsigned char word = hexString[i];
+        for ( int j = 0; j < 4; j++ ) {
+            if ( ( word & 0b00001000 ) == 0 )
                 zeroBitCounter++;
-            byte <<= 1;
+            word <<= 1;
         }
         if ( zeroBitCounter >= bits )
             return true;
