@@ -68,6 +68,8 @@ public:
      * Initialise the hashing function.
      */
     bool init();
+
+    bool hash(char *text, size_t size);
 };
 
 bool CHasher::update ( char * text, size_t size ) {
@@ -108,6 +110,16 @@ bool CHasher::alloc () {
     }
     return true;
 }
+/**
+ * Realises a complete init-update-final cycle.
+ * @param text
+ * @param size
+ * @return
+ */
+bool CHasher::hash ( char * text, size_t size ) {
+    return init () && update ( text, size ) && final();
+}
+
 /**
  * Convert hex num represented as a character to it's hexadecimal value.
  */
@@ -180,7 +192,7 @@ int findHashEx (int bits, char ** message, char ** hash, const char * hashFuncti
     RAND_bytes (reinterpret_cast<unsigned char *>(mess), HASH_SIZE );
 
     while ( true ) {
-        if ( ! hf.init () || ! hf.update(mess, HASH_SIZE) || ! hf.final() )
+        if ( ! hf.hash ( mess, HASH_SIZE ) )
             return 0;
         if ( foundMessage ( bits, hf.getHash(), hf.getHashLen() ) )
             break;
