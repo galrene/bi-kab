@@ -32,6 +32,8 @@ private:
 public:
     explicit CHasher ( int hashSize )
     : m_HashFuncType ( EVP_sha512() ), m_Ctx ( NULL ), m_Hash ( NULL ), m_HashLength ( 0 ), m_MaxHashSize ( hashSize ) {}
+    CHasher ( int hashSize, const EVP_MD * hashFunc )
+    : m_HashFuncType ( hashFunc ), m_Ctx ( NULL ), m_Hash ( NULL ), m_HashLength ( 0 ), m_MaxHashSize ( hashSize ) {}
     ~CHasher() {
         if ( m_Ctx )
             EVP_MD_CTX_free ( m_Ctx );
@@ -158,23 +160,25 @@ bool sendBytesAsHex ( const char * src, char ** dst, size_t size ) {
     memcpy( *dst, hexMsg.c_str(), hexMsg.size() + 1 );
     return true;
 }
-
 /**
- *
+ * Find message whose hash starts with bits amount of zeroes.
  * @param bits requested length of 0 prefix
  * @param message output found message
  * @param hash hash of message starting with bits amount of 0's
  * @return 1 if success, 0 if fail or wrong parameters
  */
-int findHash ( int bits, char ** message, char ** hash ) {
-    if ( bits < 0 || bits > 512 || message == NULL || hash == NULL )
+int findHashEx (int bits, char ** message, char ** hash, const char * hashFunction) {
+    const EVP_MD * hashFuncType = EVP_get_digestbyname(hashFunction);
+    if ( ! hashFuncType )
+        return 0;
+    if ( bits < 0 || bits > EVP_MD_size(hashFuncType) || message == NULL || hash == NULL )
+        return 0;
+    CHasher hf ( HASH_SIZE, hashFuncType );
+    if ( ! hf.alloc() )
         return 0;
 
-    CHasher hf ( HASH_SIZE );
-        if ( ! hf.alloc() )
-            return 0;
-
-    char mess [HASH_SIZE];
+    /* such size because the hash is going to be recycled as the new message */
+    char mess [HASH_SIZE] = {0};
     RAND_bytes (reinterpret_cast<unsigned char *>(mess), HASH_SIZE );
 
     while ( true ) {
@@ -182,7 +186,7 @@ int findHash ( int bits, char ** message, char ** hash ) {
             return 0;
         if ( foundMessage ( bits, hf.getHash(), hf.getHashLen() ) )
             break;
-        memcpy ( mess, hf.getHash(), HASH_SIZE );
+        memcpy ( mess, hf.getHash(), HASH_SIZE ); // use the next message as the previously generated hash
     }
 
     if ( ! sendBytesAsHex(mess, message, HASH_SIZE ) ||
@@ -191,11 +195,11 @@ int findHash ( int bits, char ** message, char ** hash ) {
 
     return 1;
 }
-
-
-int findHashEx (int bits, char ** message, char ** hash, const char * hashFunction) {
-    /* TODO or use dummy implementation */
-    return 1;
+/**
+ * findHashEx using sha512
+ */
+int findHash ( int bits, char ** message, char ** hash ) {
+    return findHashEx ( bits, message, hash, "sha512" );
 }
 
 #ifndef __PROGTEST__
@@ -215,7 +219,7 @@ int checkHash ( int bits, char * hexString ) {
     return zeroBitCounter >= bits;
 }
 
-int main (void) {
+int main () {
     char * message, * hash;
     assert(findHash(0, NULL, NULL) == 0);
     assert(findHash(0, &message, &hash) == 1);
@@ -243,7 +247,12 @@ int main (void) {
     free(message);
     free(hash);
     assert(findHash(20, &message, &hash) == 1);
-    assert(message && hash && checkHash(16, hash));
+    assert(message && hash && checkHash(20, hash));
+    free(message);
+    free(hash);
+    assert(findHashEx(290, &message, &hash, "sha256") == 0);
+    assert(findHashEx(10, &message, &hash, "sha256") == 1);
+    assert(message && hash && checkHash(10, hash));
     free(message);
     free(hash);
     assert(findHash(-1, &message, &hash) == 0);
