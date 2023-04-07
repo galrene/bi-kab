@@ -153,7 +153,7 @@ std::string convertToHex ( const char * src, size_t srcLen ) {
  * @return 1 if success, 0 if failure or wrong parameters
  */
 int findHash ( int bits, char ** message, char ** hash ) {
-    if ( bits < 0 || *message == NULL || *hash == NULL )
+    if ( bits < 0 || bits > 512 || *message == NULL || *hash == NULL )
         return 0;
     CHasher hf ( HASH_SIZE );
     if ( ! hf.init() )
@@ -232,6 +232,11 @@ int main (void) {
     free(hash);
     assert(findHash(3, &message, &hash) == 1);
     assert(message && hash && checkHash(3, hash));
+    free(message);
+    free(hash);
+    assert(findHash(25, &message, &hash) == 1);
+    assert(message && hash && checkHash(10, hash));
+    cout << "msg: " << message << "\n" << "hash: " << hash << endl;
     free(message);
     free(hash);
     assert(findHash(-1, &message, &hash) == 0);
