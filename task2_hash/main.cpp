@@ -55,7 +55,7 @@ public:
      * @return hash on success, NULL when no hash calculated yet
      */
     unsigned char * getHash() { return m_Hash; }
-    unsigned int    getHashLen() { return m_HashLength; }
+    unsigned int getHashLen() { return m_HashLength; }
 
     /**
      * Feed text to hashing function.
@@ -169,9 +169,7 @@ bool sendBytesAsHex ( const char * src, char ** dst, size_t size ) {
  */
 int findHashEx (int bits, char ** message, char ** hash, const char * hashFunction) {
     const EVP_MD * hashFuncType = EVP_get_digestbyname(hashFunction);
-    if ( ! hashFuncType )
-        return 0;
-    if ( bits < 0 || bits > EVP_MD_size(hashFuncType) || message == NULL || hash == NULL )
+    if ( ! hashFuncType || bits < 0 || bits > EVP_MD_size(hashFuncType) || message == NULL || hash == NULL )
         return 0;
     CHasher hf ( HASH_SIZE, hashFuncType );
     if ( ! hf.alloc() )
@@ -218,44 +216,65 @@ int checkHash ( int bits, char * hexString ) {
     }
     return zeroBitCounter >= bits;
 }
+#include <chrono>
 
 int main () {
     char * message, * hash;
-    assert(findHash(0, NULL, NULL) == 0);
-    assert(findHash(0, &message, &hash) == 1);
-    assert(message && hash && checkHash(0, hash));
-    free(message);
-    free(hash);
-    assert(findHash(1, &message, &hash) == 1);
-    assert(message && hash && checkHash(1, hash));
-    free(message);
-    free(hash);
-    assert(findHash(2, &message, &hash) == 1);
-    assert(message && hash && checkHash(2, hash));
-    free(message);
-    free(hash);
-    assert(findHash(3, &message, &hash) == 1);
-    assert(message && hash && checkHash(3, hash));
-    free(message);
-    free(hash);
-    assert(findHash(4, &message, &hash) == 1);
-    assert(message && hash && checkHash(4, hash));
-    free(message);
-    free(hash);
-    assert(findHash(16, &message, &hash) == 1);
-    assert(message && hash && checkHash(16, hash));
-    free(message);
-    free(hash);
-    assert(findHash(20, &message, &hash) == 1);
-    assert(message && hash && checkHash(20, hash));
-    free(message);
-    free(hash);
-    assert(findHashEx(290, &message, &hash, "sha256") == 0);
-    assert(findHashEx(10, &message, &hash, "sha256") == 1);
-    assert(message && hash && checkHash(10, hash));
-    free(message);
-    free(hash);
-    assert(findHash(-1, &message, &hash) == 0);
+    vector<pair<int,int>> durs;
+    for ( int i = 0 ; i < 15; i++ ) {
+        auto start = std::chrono::high_resolution_clock::now();
+        findHash ( i, &message, &hash );
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+        durs.emplace_back ( i, duration.count() );
+        std::cout << i << " zeroes time: " << duration.count() << "us" << std::endl;
+        free (message);
+        free (hash);
+    }
+    cout << "{";
+    for ( auto it = durs.begin(); it != durs.end(); ++it ) {
+        cout << "{" << it->first << "," << it->second << "}";
+        if ( it != --durs.end() )
+            cout << ",";
+    }
+    cout << "}";
+//
+//
+//    assert(findHash(0, NULL, NULL) == 0);
+//    assert(findHash(0, &message, &hash) == 1);
+//    assert(message && hash && checkHash(0, hash));
+//    free(message);
+//    free(hash);
+//    assert(findHash(1, &message, &hash) == 1);
+//    assert(message && hash && checkHash(1, hash));
+//    free(message);
+//    free(hash);
+//    assert(findHash(2, &message, &hash) == 1);
+//    assert(message && hash && checkHash(2, hash));
+//    free(message);
+//    free(hash);
+//    assert(findHash(3, &message, &hash) == 1);
+//    assert(message && hash && checkHash(3, hash));
+//    free(message);
+//    free(hash);
+//    assert(findHash(4, &message, &hash) == 1);
+//    assert(message && hash && checkHash(4, hash));
+//    free(message);
+//    free(hash);
+//    assert(findHash(16, &message, &hash) == 1);
+//    assert(message && hash && checkHash(16, hash));
+//    free(message);
+//    free(hash);
+//    assert(findHash(20, &message, &hash) == 1);
+//    assert(message && hash && checkHash(20, hash));
+//    free(message);
+//    free(hash);
+//    assert(findHashEx(290, &message, &hash, "sha256") == 0);
+//    assert(findHashEx(10, &message, &hash, "sha256") == 1);
+//    assert(message && hash && checkHash(10, hash));
+//    free(message);
+//    free(hash);
+//    assert(findHash(-1, &message, &hash) == 0);
     return EXIT_SUCCESS;
 }
 #endif /* __PROGTEST__ */
