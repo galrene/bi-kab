@@ -56,7 +56,7 @@ public:
      * @return hash on success, NULL when no hash calculated yet
      */
     unsigned char * getHash() { return m_Hash; }
-    unsigned int getHashLen() { return m_HashLength; }
+    unsigned int    getHashLen() { return m_HashLength; }
 
     /**
      * Feed text to hashing function.
@@ -107,25 +107,31 @@ bool CHasher::init () {
 
     return true;
 }
+/**
+ * Convert hex num represented as a character to it's hexadecimal value.
+ */
+unsigned char charToHex ( unsigned char c ) {
+    if ( c > 'F' || ( c < 'A' && c >'9' ) || c < '0' )
+        return 0;
+    if ( c >= 'A' )
+        return c - 55;
+    return c - '0';
+}
 
 bool foundMessage ( const int bits, const unsigned char * hash, const size_t hashLength ) {
     if ( ! hash || hashLength <= 0 || bits < 0  )
         return false;
-    if ( bits == 0 )
-        return hash[0] & 0b10000000;
-
     int zeroBitCounter = 0;
     for ( size_t i = 0; i < hashLength; i++ ) {
-        unsigned char byte = hash[i];
+        unsigned char word = hash[i];
         for ( int j = 0; j < 8; j++ ) {
-            if ( ( byte & 0b10000000 ) == 0 )
-                zeroBitCounter++;
-            byte <<= 1;
+             if ( ( word & 0b10000000 ) != 0 )
+                return zeroBitCounter >= bits;
+            zeroBitCounter++;
+            word <<= 1;
         }
-        if ( zeroBitCounter >= bits )
-            return true;
     }
-    return false;
+    return zeroBitCounter >= bits;
 }
 /**
  * Converts c string of strlen() == srcLen to a hexadecimal std::string.
@@ -133,7 +139,7 @@ bool foundMessage ( const int bits, const unsigned char * hash, const size_t has
 std::string convertToHex ( const char * src, size_t srcLen ) {
     std::stringstream ss;
     for ( int i = 0; i < srcLen; i++ )
-        ss << std::hex << std::setw(2) <<  ( unsigned int ) ( unsigned char ) src[i];
+        ss << std::uppercase << std::setfill('0') << std::setw(2) << std::hex <<  ( unsigned int ) ( unsigned char ) src[i];
     return ss.str();
 }
 
@@ -194,22 +200,20 @@ int findHashEx (int bits, char ** message, char ** hash, const char * hashFuncti
 }
 
 #ifndef __PROGTEST__
+using namespace std;
 
 int checkHash ( int bits, char * hexString ) {
-    if ( bits == 0 )
-        return hexString[0] & 0b00001000;
     int zeroBitCounter = 0;
     for ( size_t i = 0; i < 128; i++ ) {
-        unsigned char word = hexString[i];
+        unsigned char word = charToHex ( hexString[i] );
         for ( int j = 0; j < 4; j++ ) {
-            if ( ( word & 0b00001000 ) == 0 )
-                zeroBitCounter++;
+            if ( ( word & 0b00001000 ) != 0 )
+                return zeroBitCounter >= bits;
+            zeroBitCounter++;
             word <<= 1;
         }
-        if ( zeroBitCounter >= bits )
-            return true;
     }
-
+    return zeroBitCounter >= bits;
 }
 
 int main (void) {
