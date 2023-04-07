@@ -39,8 +39,7 @@ public:
             free ( m_Hash );
     }
     /**
-    * Create and initialise context, initialise sha512 hashing function,
-    * allocate memory for hash.
+    * Create and initialise context, allocate memory for hash.
     * @return 1 success, 0 fail
     */
     bool alloc ();
@@ -143,15 +142,29 @@ std::string convertToHex ( const char * src, size_t srcLen ) {
         ss << std::setfill('0') << std::setw(2) << std::hex <<  ( unsigned int ) ( unsigned char ) src[i];
     return ss.str();
 }
+/**
+ * Send size bytes from src to dst, allocate dst on the heap.
+ * @return false if src or dst null or allocation failed
+ */
+bool sendBytesAsHex ( const char * src, char ** dst, size_t size ) {
+    if ( ! src || ! dst )
+        return false;
+    std::string hexMsg = convertToHex(src, size);
+    *dst = ( char * ) malloc ( hexMsg.size() + 1 );
+    if ( ! *dst ) {
+        free(*dst);
+        return false;
+    }
+    memcpy( *dst, hexMsg.c_str(), hexMsg.size() + 1 );
+    return true;
+}
 
 /**
  *
  * @param bits requested length of 0 prefix
  * @param message output found message
  * @param hash hash of message starting with bits amount of 0's
- * Initialise with a text and then use it's hash to quickly generate a new hash until finding one
- * with n 0 bits.
- * @return 1 if success, 0 if failure or wrong parameters
+ * @return 1 if success, 0 if fail or wrong parameters
  */
 int findHash ( int bits, char ** message, char ** hash ) {
     if ( bits < 0 || bits > 512 || message == NULL || hash == NULL )
@@ -161,39 +174,21 @@ int findHash ( int bits, char ** message, char ** hash ) {
         if ( ! hf.alloc() )
             return 0;
 
-    char *msg = ( char * ) calloc ( HASH_SIZE, sizeof(char) ); // HASH_SIZE, because we'll use the hash as the next generated message
-    RAND_bytes (reinterpret_cast<unsigned char *>(msg), HASH_SIZE );
+    char mess [HASH_SIZE];
+    RAND_bytes (reinterpret_cast<unsigned char *>(mess), HASH_SIZE );
 
     while ( true ) {
-        if ( ! hf.init () || ! hf.update(msg, HASH_SIZE) || ! hf.final() ) {
-            free(msg);
+        if ( ! hf.init () || ! hf.update(mess, HASH_SIZE) || ! hf.final() )
             return 0;
-        }
         if ( foundMessage ( bits, hf.getHash(), hf.getHashLen() ) )
             break;
-        memcpy ( msg, hf.getHash(), HASH_SIZE );
+        memcpy ( mess, hf.getHash(), HASH_SIZE );
     }
 
-    std::string hexMsg = convertToHex(msg, HASH_SIZE);
-    free(msg);
-    *message = ( char * ) malloc ( hexMsg.size() + 1 );
-    if ( ! *message ) {
-        free(message);
+    if ( ! sendBytesAsHex(mess, message, HASH_SIZE ) ||
+         ! sendBytesAsHex (reinterpret_cast<const char *>(hf.getHash()), hash, hf.getHashLen() ) )
         return 0;
-    }
-    strncpy ( *message, hexMsg.c_str(), hexMsg.size() + 1 );
 
-
-    std::string hexHash = convertToHex(reinterpret_cast<const char *>(hf.getHash()), hf.getHashLen());
-    *hash = ( char * ) malloc ( hexHash.size() + 1 );
-    if ( ! *hash ) {
-        free(*hash);
-        return 0;
-    }
-    strncpy ( *hash, hexHash.c_str(), hexHash.size() + 1 );
-    printf( "Hladany pocet nul: %d\n", bits );
-    std::cout << "\nMy msg:  " << *message << "\nMy hash: " << *hash << std::endl;
-    printf("\n======================================\n");
     return 1;
 }
 
