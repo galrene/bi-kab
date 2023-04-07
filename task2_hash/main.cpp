@@ -1,6 +1,4 @@
 #ifndef __PROGTEST__
-#pragma clang diagnostic push
-#pragma ide diagnostic ignored "modernize-use-auto"
 #include <assert.h>
 #include <ctype.h>
 #include <limits.h>
@@ -248,5 +246,4 @@ int main (void) {
     assert(findHash(-1, &message, &hash) == 0);
     return EXIT_SUCCESS;
 }
-#pragma clang diagnostic pop
 #endif /* __PROGTEST__ */
