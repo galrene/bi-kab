@@ -43,7 +43,7 @@ public:
     * allocate memory for hash.
     * @return 1 success, 0 fail
     */
-    bool init ();
+    bool alloc ();
     /**
      * Calculate the hash from fed message.
      * @return hash on success, NULL on failure
@@ -62,13 +62,17 @@ public:
      * @param size length of text excluding \0
      * @return true success, false failure
      */
-    bool feed ( char * text, size_t size );
+    bool update ( char * text, size_t size );
+    /**
+     * Initialise the hashing function.
+     */
+    bool init();
 };
 
-bool CHasher::feed ( char * text, size_t size ) {
+bool CHasher::update ( char * text, size_t size ) {
     // feed message to function
     if ( ! EVP_DigestUpdate ( m_Ctx, text, size ) ) {
-//        printf("Failed to feed the message.\n");
+        printf("Failed to feed the message.\n");
         return false;
     }
     return true;
@@ -77,27 +81,30 @@ bool CHasher::feed ( char * text, size_t size ) {
 unsigned char * CHasher::final () {
     // get the hash
     if ( ! EVP_DigestFinal_ex ( m_Ctx, m_Hash, &m_HashLength ) ) {
-//        printf("Failed to finalize the hash.\n");
+        printf("Failed to finalize the hash.\n");
         return NULL;
     }
     return m_Hash;
 }
 
-bool CHasher::init () {
-    if ( m_Ctx = EVP_MD_CTX_new(); m_Ctx == NULL ) {
-//        printf("Context creation/initialisation failed.\n");
+bool CHasher::init() {
+    if ( ! EVP_DigestInit_ex( m_Ctx, m_HashFuncType, NULL ) ) {
+        printf( "Digest setup failed.\n");
         return false;
     }
-    if ( ! EVP_DigestInit_ex( m_Ctx, m_HashFuncType, NULL ) ) {
-//        printf( "Context setup for sha512 failed.\n");
+    return true;
+}
+
+bool CHasher::alloc () {
+    if ( m_Ctx = EVP_MD_CTX_new(); m_Ctx == NULL ) {
+        printf("Context creation/initialisation failed.\n");
         return false;
     }
     m_Hash = ( unsigned char * ) calloc ( m_MaxHashSize, sizeof ( unsigned char ) );
     if ( ! m_Hash ) {
-//        printf( "Hash allocation failed.\n");
+        printf( "Hash allocation failed.\n");
         return false;
     }
-
     return true;
 }
 /**
@@ -147,18 +154,18 @@ std::string convertToHex ( const char * src, size_t srcLen ) {
  * @return 1 if success, 0 if failure or wrong parameters
  */
 int findHash ( int bits, char ** message, char ** hash ) {
-    if ( bits < 0 || bits > 512 || *message == NULL || *hash == NULL )
-        return 0;
-    CHasher hf ( HASH_SIZE );
-    if ( ! hf.init() )
+    if ( bits < 0 || bits > 512 || message == NULL || hash == NULL )
         return 0;
 
-    std::string initialMessage = "raz si dole hore, v pozore, vo svojom dvore, obzore, v nore, na";
+    CHasher hf ( HASH_SIZE );
+        if ( ! hf.alloc() )
+            return 0;
+
     char *msg = ( char * ) calloc ( HASH_SIZE, sizeof(char) ); // HASH_SIZE, because we'll use the hash as the next generated message
-    memcpy ( msg, initialMessage.c_str(), HASH_SIZE );
+    RAND_bytes (reinterpret_cast<unsigned char *>(msg), HASH_SIZE );
 
     while ( true ) {
-        if (!hf.feed(msg, HASH_SIZE) || !hf.final()) {
+        if ( ! hf.init () || ! hf.update(msg, HASH_SIZE) || ! hf.final() ) {
             free(msg);
             return 0;
         }
@@ -166,31 +173,27 @@ int findHash ( int bits, char ** message, char ** hash ) {
             break;
         memcpy ( msg, hf.getHash(), HASH_SIZE );
     }
-//    printf( "Hladany pocet nul: %d\n", bits );
-//    printf("Hash textu \"%s\" je: ", msg);
-//    for (unsigned int i = 0; i < hf.getHashLen(); i++)
-//        printf("%02x", hf.getHash()[i]);
 
     std::string hexMsg = convertToHex(msg, HASH_SIZE);
-    msg = ( char * ) realloc ( msg, hexMsg.size() + 1 );
-    if ( ! msg ) {
-        free(msg);
+    free(msg);
+    *message = ( char * ) malloc ( hexMsg.size() + 1 );
+    if ( ! *message ) {
+        free(message);
         return 0;
     }
-    strncpy ( msg, hexMsg.c_str(), hexMsg.size() + 1 );
-    *message = msg;
+    strncpy ( *message, hexMsg.c_str(), hexMsg.size() + 1 );
 
 
     std::string hexHash = convertToHex(reinterpret_cast<const char *>(hf.getHash()), hf.getHashLen());
     *hash = ( char * ) malloc ( hexHash.size() + 1 );
     if ( ! *hash ) {
-        free(msg);
         free(*hash);
         return 0;
     }
     strncpy ( *hash, hexHash.c_str(), hexHash.size() + 1 );
-//    std::cout << "\nMy msg: " << msg << "\nMy hash: " << *hash << std::endl;
-//    printf("\n======================================\n");
+    printf( "Hladany pocet nul: %d\n", bits );
+    std::cout << "\nMy msg:  " << *message << "\nMy hash: " << *hash << std::endl;
+    printf("\n======================================\n");
     return 1;
 }
 
@@ -219,6 +222,7 @@ int checkHash ( int bits, char * hexString ) {
 
 int main (void) {
     char * message, * hash;
+    assert(findHash(0, NULL, NULL) == 0);
     assert(findHash(0, &message, &hash) == 1);
     assert(message && hash && checkHash(0, hash));
     free(message);
@@ -240,6 +244,10 @@ int main (void) {
     free(message);
     free(hash);
     assert(findHash(16, &message, &hash) == 1);
+    assert(message && hash && checkHash(16, hash));
+    free(message);
+    free(hash);
+    assert(findHash(20, &message, &hash) == 1);
     assert(message && hash && checkHash(16, hash));
     free(message);
     free(hash);
