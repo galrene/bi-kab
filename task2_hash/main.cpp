@@ -1,6 +1,6 @@
+#ifndef __PROGTEST__
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "modernize-use-auto"
-#ifndef __PROGTEST__
 #include <assert.h>
 #include <ctype.h>
 #include <limits.h>
@@ -138,7 +138,7 @@ bool foundMessage ( const int bits, const unsigned char * hash, const size_t has
  */
 std::string convertToHex ( const char * src, size_t srcLen ) {
     std::stringstream ss;
-    for ( int i = 0; i < srcLen; i++ )
+    for ( size_t i = 0; i < srcLen; i++ )
         ss << std::uppercase << std::setfill('0') << std::setw(2) << std::hex <<  ( unsigned int ) ( unsigned char ) src[i];
     return ss.str();
 }
