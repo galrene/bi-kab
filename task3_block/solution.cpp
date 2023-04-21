@@ -31,6 +31,9 @@ struct crypto_config
 
 #endif /* __PROGTEST__ */
 
+#define INBUFF_SIZE 1024
+#define OUTBUFF_SIZE INBUFF_SIZE
+
 class CCipher {
 private:
     EVP_CIPHER_CTX * m_Ctx;
@@ -38,6 +41,20 @@ private:
     struct crypto_config & m_Cfg;
 
     bool validateConfig () {
+        int cipherKeyLen = EVP_CIPHER_key_length ( m_Cipher );
+        int cipherIVLen = EVP_CIPHER_iv_length ( m_Cipher );
+        if ( m_Cfg.m_key == nullptr
+            || m_Cfg.m_key_len < cipherKeyLen ) {
+            m_Cfg.m_key = make_unique<uint8_t[]> ( cipherKeyLen );
+            m_Cfg.m_key_len = cipherKeyLen;
+            RAND_bytes ( m_Cfg.m_key.get(), cipherKeyLen );
+        }
+        if ( m_Cfg.m_IV == nullptr || m_Cfg.m_IV_len < cipherIVLen )
+            if ( cipherIVLen ) {
+                m_Cfg.m_IV = make_unique<uint8_t[]> ( cipherIVLen );
+                m_Cfg.m_IV_len = cipherIVLen;
+                RAND_bytes ( m_Cfg.m_IV.get(), cipherIVLen );
+            }
         return true;
     }
 
@@ -52,16 +69,36 @@ public:
      * Validate supplied config, initialise context and given cipher.
      */
     bool init ();
-
+    bool encryptFile ( ifstream & ifs, ofstream & ofs );
 };
 
-bool CCipher::init () {
-    if ( ! validateConfig() )
+bool CCipher::encryptFile ( ifstream & ifs, ofstream & ofs ) {
+    if ( ! ifs.good() )
         return false;
+    char inBuff[INBUFF_SIZE] = {};
+    char outBuff[OUTBUFF_SIZE] = {};
+    int outSize = 0;
+    while ( ifs.good() && ofs.good() ) {
+        ifs.read ( inBuff, INBUFF_SIZE );
+        if ( ! EVP_CipherUpdate (m_Ctx,
+        reinterpret_cast<unsigned char *>(outBuff), &outSize,
+        reinterpret_cast<const unsigned char *>(inBuff), INBUFF_SIZE ) )
+            return false;
+        ofs.write ( outBuff, OUTBUFF_SIZE );
+        if ( ifs.gcount() != INBUFF_SIZE )
+            break;
+    }
+    if ( ifs.eof() )
+        return true;
+}
+
+bool CCipher::init () {
     if ( m_Ctx = EVP_CIPHER_CTX_new(); m_Ctx == NULL )
         return false;
     OpenSSL_add_all_ciphers();
     if ( m_Cipher = EVP_get_cipherbyname (m_Cfg.m_crypto_function ); ! m_Cipher )
+        return false;
+    if ( ! validateConfig() )
         return false;
     // enc: 1 encrypt, 0 decrpyt, -1 leave unchanged from prev call
     if ( ! EVP_CipherInit ( m_Ctx, m_Cipher, m_Cfg.m_key.get(), m_Cfg.m_IV.get(), 1 ) )
@@ -71,6 +108,7 @@ bool CCipher::init () {
 
 
 bool encrypt_data ( const std::string & in_filename, const std::string & out_filename, crypto_config & config ) {
+
     if ( ! checkConfig ( config ) )
         return false;
     ifstream ifs ( in_filename );
@@ -89,6 +127,7 @@ bool encrypt_data ( const std::string & in_filename, const std::string & out_fil
 
     // update in a cycle
     // final
+    // close ifs, ofs
 }
 
 bool decrypt_data ( const std::string & in_filename, const std::string & out_filename, crypto_config & config ) {
