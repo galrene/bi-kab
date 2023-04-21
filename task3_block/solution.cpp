@@ -31,8 +31,64 @@ struct crypto_config
 
 #endif /* __PROGTEST__ */
 
-bool encrypt_data ( const std::string & in_filename, const std::string & out_filename, crypto_config & config ) {
+class CCipher {
+private:
+    EVP_CIPHER_CTX * m_Ctx;
+    const EVP_CIPHER * m_Cipher;
+    struct crypto_config & m_Cfg;
 
+    bool validateConfig () {
+        return true;
+    }
+
+public:
+    CCipher ( struct crypto_config & cfg )
+    : m_Ctx ( NULL ), m_Cipher ( NULL ), m_Cfg ( cfg ) {}
+    ~CCipher () {
+
+        EVP_CIPHER_CTX_free(m_Ctx);
+    }
+    /**
+     * Validate supplied config, initialise context and given cipher.
+     */
+    bool init ();
+
+};
+
+bool CCipher::init () {
+    if ( ! validateConfig() )
+        return false;
+    if ( m_Ctx = EVP_CIPHER_CTX_new(); m_Ctx == NULL )
+        return false;
+    OpenSSL_add_all_ciphers();
+    if ( m_Cipher = EVP_get_cipherbyname (m_Cfg.m_crypto_function ); ! m_Cipher )
+        return false;
+    // enc: 1 encrypt, 0 decrpyt, -1 leave unchanged from prev call
+    if ( ! EVP_CipherInit ( m_Ctx, m_Cipher, m_Cfg.m_key.get(), m_Cfg.m_IV.get(), 1 ) )
+        return false;
+    return true;
+}
+
+
+bool encrypt_data ( const std::string & in_filename, const std::string & out_filename, crypto_config & config ) {
+    if ( ! checkConfig ( config ) )
+        return false;
+    ifstream ifs ( in_filename );
+    ofstream ofs ( out_filename );
+    if ( ! ifs.good() || ! ofs.good() ) {
+        cout << "Unable to open file" << endl;
+        return false;
+    }
+    char header[18] = {0};
+    ifs.read ( header, 18 );
+    if ( ifs.gcount() != 18 ) {
+        cout << "Unable to read header" << endl;
+        return false;
+    }
+
+
+    // update in a cycle
+    // final
 }
 
 bool decrypt_data ( const std::string & in_filename, const std::string & out_filename, crypto_config & config ) {
@@ -41,10 +97,20 @@ bool decrypt_data ( const std::string & in_filename, const std::string & out_fil
 
 
 #ifndef __PROGTEST__
-
+// TODO: test for files with different lengths!
 bool compare_files ( const char * name1, const char * name2 )
 {
-
+    ifstream ifs1 (name1);
+    ifstream ifs2 (name2);
+    string word;
+    string word2;
+    while ( ifs1 >> word && ifs2 >> word2 ) {
+        if ( word != word2)
+            return false;
+    }
+    if ( word != word2)
+        return false;
+    return true;
 }
 
 int main ( void )
