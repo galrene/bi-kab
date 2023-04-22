@@ -97,7 +97,7 @@ bool CCipher::updateFile ( ifstream & ifs, ofstream & ofs ) {
         ifs.read ( inBuff, INBUFF_CAP );
         if ( ! EVP_CipherUpdate (m_Ctx,
         reinterpret_cast<unsigned char *>(outBuff), &outSize,
-        reinterpret_cast<const unsigned char *>(inBuff), INBUFF_CAP ) ) {
+        reinterpret_cast<const unsigned char *>(inBuff), ifs.gcount() ) ) {
             cout << "Update failed" << endl;
             return false;
         }
@@ -138,7 +138,7 @@ bool CCipher::init ( bool encrypt ) {
         cout << "Cfg validation failed" << endl;
         return false;
     }
-    if ( ! EVP_CipherInit_ex2( m_Ctx, m_Cipher, m_Cfg.m_key.get(), m_Cfg.m_IV.get(), static_cast<int> ( encrypt ), NULL ) ) {
+    if ( ! EVP_CipherInit_ex( m_Ctx, m_Cipher, NULL, m_Cfg.m_key.get(), m_Cfg.m_IV.get(), static_cast<int> ( encrypt ) ) ) {
         cout << "Init failed" << endl;
         return false;
     }
