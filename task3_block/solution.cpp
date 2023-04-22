@@ -40,6 +40,7 @@ private:
     const EVP_CIPHER * m_Cipher;
     struct crypto_config & m_Cfg;
     bool validateConfig ( bool encrypt );
+    size_t m_ReadBytes = 0;
 public:
     CCipher ( struct crypto_config & cfg )
     : m_Ctx ( NULL ), m_Cipher ( NULL ), m_Cfg ( cfg ) {}
@@ -57,8 +58,7 @@ public:
 bool CCipher::validateConfig ( bool encrypt ) {
     size_t cipherKeyLen = EVP_CIPHER_key_length ( m_Cipher );
     size_t cipherIVLen = EVP_CIPHER_iv_length ( m_Cipher );
-    if ( m_Cfg.m_key == nullptr
-        || m_Cfg.m_key_len < cipherKeyLen ) {
+    if ( m_Cfg.m_key == nullptr || m_Cfg.m_key_len < cipherKeyLen ) {
         if ( ! encrypt ) {
             cout << "Key error" << endl;
             return false;
@@ -101,21 +101,26 @@ bool CCipher::updateFile ( ifstream & ifs, ofstream & ofs ) {
             cout << "Update failed" << endl;
             return false;
         }
+        m_ReadBytes += outSize;
         ofs.write ( outBuff, outSize );
     }
     // finished reading infile
+    cout << "Read bytes pre-finish: " << m_ReadBytes << endl;
     if ( ifs.eof() ) {
         if ( ! EVP_CipherFinal_ex ( m_Ctx, reinterpret_cast<unsigned char *>(outBuff), &outSize ) ) {
             cout << "Final failed" << endl;
             return false;
         }
+        m_ReadBytes += outSize;
         ofs.write ( outBuff, outSize );
         if ( ! ofs.good() ) {
             cout << "Final write failed" << endl;
             return false;
         }
+        cout << "Read bytes: " << m_ReadBytes << endl;
         return true;
     }
+    cout << "Did not read whole infile" << endl;
     return false;
 }
 
@@ -141,7 +146,7 @@ bool CCipher::init ( bool encrypt ) {
 }
 
 bool copyHeader ( ifstream & ifs, ofstream & ofs ) {
-    char header[18] = {0};
+    char header[18] = {};
     ifs.read ( header, 18 );
     if ( ifs.gcount() != 18 ) {
         cout << "Unable to read header" << endl;
@@ -156,7 +161,7 @@ bool copyHeader ( ifstream & ifs, ofstream & ofs ) {
 bool crypt_ex ( const std::string & in_filename, const std::string & out_filename, crypto_config & config, bool encrpyt ) {
     CCipher c ( config );
     ifstream ifs ( in_filename );
-    ofstream ofs; ofs.open ( out_filename );
+    ofstream ofs ( out_filename );
     if ( ! ifs.good() || ! ofs.good() ) {
         cout << "Unable to open file" << endl;
         return false;
