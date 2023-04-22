@@ -40,7 +40,6 @@ private:
     const EVP_CIPHER * m_Cipher;
     struct crypto_config & m_Cfg;
     bool validateConfig ( bool encrypt );
-    size_t m_ReadBytes = 0;
 public:
     CCipher ( struct crypto_config & cfg )
     : m_Ctx ( NULL ), m_Cipher ( NULL ), m_Cfg ( cfg ) {}
@@ -59,20 +58,16 @@ bool CCipher::validateConfig ( bool encrypt ) {
     size_t cipherKeyLen = EVP_CIPHER_key_length ( m_Cipher );
     size_t cipherIVLen = EVP_CIPHER_iv_length ( m_Cipher );
     if ( m_Cfg.m_key == nullptr || m_Cfg.m_key_len < cipherKeyLen ) {
-        if ( ! encrypt ) {
-            cout << "Key error" << endl;
+        if ( ! encrypt )
             return false;
-        }
         m_Cfg.m_key = make_unique<uint8_t[]> ( cipherKeyLen );
         m_Cfg.m_key_len = cipherKeyLen;
         RAND_bytes ( m_Cfg.m_key.get(), cipherKeyLen );
     }
     if ( m_Cfg.m_IV == nullptr || m_Cfg.m_IV_len < cipherIVLen ) {
         if ( cipherIVLen ) {
-            if ( ! encrypt ) {
-                cout << "IV error" << endl;
+            if ( ! encrypt )
                 return false;
-            }
             m_Cfg.m_IV = make_unique<uint8_t[]> ( cipherIVLen );
             m_Cfg.m_IV_len = cipherIVLen;
             RAND_bytes ( m_Cfg.m_IV.get(), cipherIVLen );
@@ -80,14 +75,6 @@ bool CCipher::validateConfig ( bool encrypt ) {
     }
     return true;
 }
-
-/**
- * The functions EVP_EncryptInit(), EVP_EncryptInit_ex(), EVP_EncryptFinal(), EVP_DecryptInit(), EVP_DecryptInit_ex(),
- * EVP_CipherInit(), EVP_CipherInit_ex() and EVP_CipherFinal() are obsolete but are retained for compatibility with
- * existing code. New code should use EVP_EncryptInit_ex2(), EVP_EncryptFinal_ex(), EVP_DecryptInit_ex2(),
- * EVP_DecryptFinal_ex(), EVP_CipherInit_ex2() and EVP_CipherFinal_ex() because they can reuse an existing context
- * without allocating and freeing it up on each call.
- */
 
 bool CCipher::updateFile ( ifstream & ifs, ofstream & ofs ) {
     char inBuff[INBUFF_CAP] = {};
@@ -97,51 +84,32 @@ bool CCipher::updateFile ( ifstream & ifs, ofstream & ofs ) {
         ifs.read ( inBuff, INBUFF_CAP );
         if ( ! EVP_CipherUpdate (m_Ctx,
         reinterpret_cast<unsigned char *>(outBuff), &outSize,
-        reinterpret_cast<const unsigned char *>(inBuff), ifs.gcount() ) ) {
-            cout << "Update failed" << endl;
+        reinterpret_cast<const unsigned char *>(inBuff), ifs.gcount() ) )
             return false;
-        }
-        m_ReadBytes += outSize;
         ofs.write ( outBuff, outSize );
     }
     // finished reading infile
-    cout << "Read bytes pre-finish: " << m_ReadBytes << endl;
     if ( ifs.eof() ) {
-        if ( ! EVP_CipherFinal_ex ( m_Ctx, reinterpret_cast<unsigned char *>(outBuff), &outSize ) ) {
-            cout << "Final failed" << endl;
+        if ( ! EVP_CipherFinal_ex ( m_Ctx, reinterpret_cast<unsigned char *>(outBuff), &outSize ) )
             return false;
-        }
-        m_ReadBytes += outSize;
         ofs.write ( outBuff, outSize );
-        if ( ! ofs.good() ) {
-            cout << "Final write failed" << endl;
+        if ( ! ofs.good() )
             return false;
-        }
-        cout << "Read bytes: " << m_ReadBytes << endl;
         return true;
     }
-    cout << "Did not read whole infile" << endl;
     return false;
 }
 
 bool CCipher::init ( bool encrypt ) {
-    if ( m_Ctx = EVP_CIPHER_CTX_new(); ! m_Ctx ) {
-        cout << "Context creation" << endl;
-        return false;
-    }
     OpenSSL_add_all_ciphers();
-    if ( m_Cipher = EVP_get_cipherbyname (m_Cfg.m_crypto_function ); ! m_Cipher ) {
-        cout << "Cipher name not found" << endl;
+    if ( m_Ctx = EVP_CIPHER_CTX_new(); ! m_Ctx )
         return false;
-    }
-    if ( ! validateConfig ( encrypt ) ) {
-        cout << "Cfg validation failed" << endl;
+    if ( m_Cipher = EVP_get_cipherbyname (m_Cfg.m_crypto_function ); ! m_Cipher )
         return false;
-    }
-    if ( ! EVP_CipherInit_ex( m_Ctx, m_Cipher, NULL, m_Cfg.m_key.get(), m_Cfg.m_IV.get(), static_cast<int> ( encrypt ) ) ) {
-        cout << "Init failed" << endl;
+    if ( ! validateConfig ( encrypt ) )
         return false;
-    }
+    if ( ! EVP_CipherInit_ex( m_Ctx, m_Cipher, NULL, m_Cfg.m_key.get(), m_Cfg.m_IV.get(), static_cast<int> ( encrypt ) ) )
+        return false;
     return true;
 }
 
@@ -174,7 +142,6 @@ bool crypt_ex ( const std::string & in_filename, const std::string & out_filenam
         cout << "Cipher failed" << endl;
         return false;
     }
-    // close ifs, ofs?
     return true;
 }
 
@@ -189,7 +156,6 @@ bool decrypt_data ( const std::string & in_filename, const std::string & out_fil
 
 #ifndef __PROGTEST__
 #include <filesystem>
-// TODO: test for files with different lengths!
 bool compare_files ( const char * name1, const char * name2 ) {
     namespace fs = std::filesystem;
     if ( fs::file_size(name1) != fs::file_size(name2) ) {
