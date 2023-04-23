@@ -32,7 +32,7 @@ struct crypto_config
 #endif /* __PROGTEST__ */
 
 #define INBUFF_CAP 1024
-#define OUTBUFF_CAP INBUFF_CAP
+#define OUTBUFF_CAP ( INBUFF_CAP + EVP_MAX_BLOCK_LENGTH )
 
 class CCipher {
 private:
