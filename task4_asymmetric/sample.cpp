@@ -22,6 +22,9 @@ using namespace std;
 
 #endif /* __PROGTEST__ */
 
+#define INBUFF_CAP 1024
+#define OUTBUFF_CAP ( INBUFF_CAP + EVP_MAX_BLOCK_LENGTH )
+
 struct TCryptoConfig {
     const char * m_InFile;
     const char * m_Outfile;
@@ -43,7 +46,7 @@ private:
 
     EVP_PKEY * m_PKey;
     ifstream m_Infile;
-    ifstream m_Outfile;
+    ofstream m_Outfile;
 public:
     explicit CHybridCipher ( const TCryptoConfig & cfg )
     : m_Ctx ( NULL ), m_Cipher ( NULL ), m_Cfg ( cfg ),
@@ -51,15 +54,43 @@ public:
 
     ~CHybridCipher();
 
+    bool updateFile ();
+
     bool init ( bool encrypt );
 };
 
 CHybridCipher::~CHybridCipher() {
-    if ( m_Outfile.is_open() )
-        std::remove ( m_Cfg.m_Outfile );
+    // TODO: you want to del only on failure
+//    if ( m_Outfile.is_open() )
+//        std::remove ( m_Cfg.m_Outfile );
     if ( m_PKey )
         EVP_PKEY_free ( m_PKey );
 }
+
+bool CHybridCipher::updateFile () {
+    char inBuff[INBUFF_CAP] = {};
+    char outBuff[OUTBUFF_CAP] = {};
+    int outSize = 0;
+    while ( m_Infile.good() && m_Outfile.good() ) {
+        m_Infile.read ( inBuff, INBUFF_CAP );
+        if ( ! EVP_SealUpdate (m_Ctx,
+                                 reinterpret_cast<unsigned char *>(outBuff), &outSize,
+                                 reinterpret_cast<const unsigned char *>(inBuff), m_Infile.gcount() ) )
+            return false;
+        m_Outfile.write ( outBuff, outSize );
+    }
+    // finished reading infile
+    if ( m_Infile.eof() ) {
+        if ( ! EVP_SealFinal ( m_Ctx, reinterpret_cast<unsigned char *>(outBuff), &outSize ) )
+            return false;
+        m_Outfile.write ( outBuff, outSize );
+        if ( ! m_Outfile.good() )
+            return false;
+        return true;
+    }
+    return false;
+}
+
 
 bool CHybridCipher::init ( bool encrypt ) {
     OpenSSL_add_all_ciphers();
