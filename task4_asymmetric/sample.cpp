@@ -59,6 +59,8 @@ public:
     bool init ();
 
     bool writeHeader();
+
+    bool readHeader();
 };
 
 CHybridCipher::~CHybridCipher() {
@@ -152,6 +154,32 @@ bool CHybridCipher::writeHeader() {
         return false;
     return true;
 }
+/**
+    Pozice v souboru 	Délka 	    Struktura 	        Popis
+    0 	                4 B 	    int 	            NID - numerical identifier for an OpenSSL cipher. (Použitá symetrická šifra)
+    4 	                4 B 	    int 	            EKlen - délka zašifrovaného klíče
+    8 	                EKlen B 	pole unsigned char 	Zašifrovaný klíč pomocí RSA
+    8 + EKlen 	        IVlen B 	pole unsigned char 	Inicializační vektor (pokud je potřeba)
+    8 + EKlen + IVlen 	  —    	    pole unsigned char 	Zašifrovaná data
+ */
+bool CHybridCipher::readHeader () {
+    char NID[4] = {};
+    m_Infile.read ( NID, 4 );
+    if ( m_Infile.gcount() != 4 )
+        return false;
+    char EKlen[4] = {};
+    m_Infile.read ( EKlen, 4 );
+    if ( m_Infile.gcount() != 4 )
+        return false;
+    int nid = 0;
+    if ( nid = stoi ( NID ); ! nid )
+        return false;
+    int ekLen = 0;
+    if ( ekLen = stoi ( EKlen ); ! ekLen )
+        return false;
+
+
+}
 
 bool seal ( const char * inFile, const char * outFile, const char * publicKeyFile, const char * symmetricCipher ) {
     CHybridCipher c ( { inFile, outFile, publicKeyFile, symmetricCipher } );
@@ -163,6 +191,8 @@ bool seal ( const char * inFile, const char * outFile, const char * publicKeyFil
 }
 
 bool open ( const char * inFile, const char * outFile, const char * privateKeyFile ) {
+    CHybridCipher c ( { inFile, outFile, privateKeyFile, NULL } );
+
     return true;
 }
 
