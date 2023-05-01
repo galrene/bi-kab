@@ -28,10 +28,10 @@ using namespace std;
 struct TCryptoConfig {
     const char * m_InFile;
     const char * m_Outfile;
-    const char * m_PublicKeyFile;
+    const char * m_PemFile;
     const char * m_Cipher;
     TCryptoConfig ( const char * inf, const char * outf, const char * pkf, const char * cipher )
-            : m_Cipher ( cipher ), m_InFile ( inf ), m_Outfile ( outf ), m_PublicKeyFile ( pkf )
+            : m_Cipher ( cipher ), m_InFile ( inf ), m_Outfile ( outf ), m_PemFile ( pkf )
     {}
 };
 
@@ -64,6 +64,8 @@ public:
 CHybridCipher::~CHybridCipher() {
     if ( m_PKey )
         EVP_PKEY_free ( m_PKey );
+    if ( m_Ctx )
+        EVP_CIPHER_CTX_free ( m_Ctx );
 }
 
 bool CHybridCipher::updateFile () {
@@ -92,7 +94,7 @@ bool CHybridCipher::updateFile () {
 
 bool CHybridCipher::init () {
     OpenSSL_add_all_ciphers();
-    if ( ! m_Cfg.m_InFile || ! m_Cfg.m_Outfile || ! m_Cfg.m_PublicKeyFile || ! m_Cfg.m_Cipher )
+    if ( ! m_Cfg.m_InFile || ! m_Cfg.m_Outfile || ! m_Cfg.m_PemFile || ! m_Cfg.m_Cipher )
         return false;
     if ( m_Ctx = EVP_CIPHER_CTX_new(); ! m_Ctx )
         return false;
@@ -101,7 +103,7 @@ bool CHybridCipher::init () {
     m_Infile.open ( m_Cfg.m_InFile ); m_Outfile.open ( m_Cfg.m_Outfile );
     if ( ! m_Infile.good() || ! m_Outfile.good() )
         return false;
-    FILE * pkFile = fopen ( m_Cfg.m_PublicKeyFile, "r" );
+    FILE * pkFile = fopen ( m_Cfg.m_PemFile, "r" );
     if ( ! pkFile ) {
         fclose ( pkFile );
         return false;
@@ -161,7 +163,6 @@ bool seal ( const char * inFile, const char * outFile, const char * publicKeyFil
 }
 
 bool open ( const char * inFile, const char * outFile, const char * privateKeyFile ) {
-    //waiting for code...
     return true;
 }
 
