@@ -75,7 +75,7 @@ bool CHybridCipher::updateFile ( ifstream & inFile, ofstream & outFile ) {
     int outSize = 0;
     while ( inFile.good() && outFile.good() ) {
         inFile.read ( inBuff, INBUFF_CAP );
-        if ( ! EVP_SealUpdate (m_Ctx,
+        if ( ! EVP_CipherUpdate ( m_Ctx,
                                  reinterpret_cast<unsigned char *>(outBuff), &outSize,
                                  reinterpret_cast<const unsigned char *>(inBuff), inFile.gcount() ) )
             return false;
@@ -83,7 +83,7 @@ bool CHybridCipher::updateFile ( ifstream & inFile, ofstream & outFile ) {
     }
     // finished reading infile
     if ( inFile.eof() ) {
-        if ( ! EVP_SealFinal ( m_Ctx, reinterpret_cast<unsigned char *>(outBuff), &outSize ) )
+        if ( ! EVP_CipherFinal ( m_Ctx, reinterpret_cast<unsigned char *>(outBuff), &outSize ) )
             return false;
         outFile.write ( outBuff, outSize );
         if ( ! outFile.good() )
