@@ -170,12 +170,12 @@ bool CHybridCipher::fReadCfg ( ifstream & inFile, const char * privateKeyFile ) 
 
     int nid = 0;
     inFile.read ( (char*)&nid, 4 );
-    if ( inFile.gcount() != 4 || nid == 0 )
+    if ( inFile.gcount() != 4 || nid <= 0 )
         return false;
 
     m_EncKeyLen = 0;
     inFile.read ( (char*)&m_EncKeyLen, 4 );
-    if ( inFile.gcount() != 4 || m_EncKeyLen == 0 )
+    if ( inFile.gcount() != 4 || m_EncKeyLen <= 0 )
         return false;
 
     if ( m_Cipher = EVP_get_cipherbynid ( nid ); ! m_Cipher )
@@ -196,10 +196,14 @@ bool CHybridCipher::fReadCfg ( ifstream & inFile, const char * privateKeyFile ) 
 }
 
 bool seal ( const char * inFile, const char * outFile, const char * publicKeyFile, const char * symmetricCipher ) {
+    if ( ! inFile || ! outFile || ! publicKeyFile || ! symmetricCipher )
+        return false;
     CHybridCipher c ( { publicKeyFile, symmetricCipher } );
     ifstream ifs ( inFile ); ofstream ofs ( outFile );
-    if ( ! ifs.good() || ! ofs.good() )
+    if ( ! ifs.good() || ! ofs.good() ) {
+        std::remove ( outFile );
         return false;
+    }
     if ( ! c.init ( true ) || ! c.writeHeader ( ofs ) || ! c.updateFile ( ifs, ofs ) ) {
         std::remove ( outFile );
         return false;
@@ -208,6 +212,8 @@ bool seal ( const char * inFile, const char * outFile, const char * publicKeyFil
 }
 
 bool open ( const char * inFile, const char * outFile, const char * privateKeyFile ) {
+    if ( ! inFile || ! outFile || ! privateKeyFile )
+        return false;
     ifstream ifs ( inFile ); ofstream ofs ( outFile );
     if ( ! ifs.good() || ! ofs.good() )
         return false;
