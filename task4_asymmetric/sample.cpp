@@ -36,10 +36,9 @@ private:
     const EVP_CIPHER * m_Cipher;
     TCryptoConfig m_Cfg;
     unsigned char m_IV[EVP_MAX_IV_LENGTH] = {};
-    unsigned char * m_EncKey;
+    unsigned char * m_EncKey; // encrypted symmetric cipher key
     int m_EncKeyLen;
-
-    EVP_PKEY * m_PKey;
+    EVP_PKEY * m_PKey; // public or private key
 public:
     CHybridCipher ()
     : m_Ctx ( NULL ), m_Cipher ( NULL ), m_Cfg (),
@@ -56,9 +55,9 @@ public:
 
     bool writeHeader ( ofstream & outFile );
 
-    bool readCfg ( ifstream &inFile, const char *privateKeyFile );
+    bool fReadCfg ( ifstream &inFile, const char *privateKeyFile );
 
-    bool fReadKey(const char *fileName, bool seal);
+    bool fReadKey ( const char *fileName, bool publicKey );
 };
 
 CHybridCipher::~CHybridCipher() {
@@ -176,7 +175,7 @@ bool CHybridCipher::writeHeader ( ofstream & outFile ) {
     8 + EKlen 	        IVlen B 	pole unsigned char 	Inicializační vektor (pokud je potřeba)
     8 + EKlen + IVlen 	  —    	    pole unsigned char 	Zašifrovaná data
  */
-bool CHybridCipher::readCfg ( ifstream & inFile, const char * privateKeyFile ) {
+bool CHybridCipher::fReadCfg ( ifstream & inFile, const char * privateKeyFile ) {
     if ( ! inFile.good() || ! privateKeyFile )
         return false;
 
@@ -195,12 +194,14 @@ bool CHybridCipher::readCfg ( ifstream & inFile, const char * privateKeyFile ) {
     if ( m_Cipher =  EVP_get_cipherbynid ( nid ); ! m_Cipher )
         return false;
 
-    int ekLen = 0;
-    if ( ekLen = stoi ( EKlen ); ! ekLen )
+    if ( m_EncKeyLen = stoi ( EKlen ); ! m_EncKeyLen )
         return false;
 
-    char * EK = new char[ekLen];
+    m_EncKey = ( unsigned char * ) malloc ( m_EncKeyLen );
+    inFile.read (reinterpret_cast<char *>(m_EncKey), m_EncKeyLen );
 
+    if ( EVP_CIPHER_iv_length ( m_Cipher ) )
+        inFile.read (reinterpret_cast<char *>(m_IV), EVP_CIPHER_iv_length (m_Cipher ) );
     return true;
 }
 
@@ -221,18 +222,15 @@ bool open ( const char * inFile, const char * outFile, const char * privateKeyFi
     if ( ! ifs.good() || ! ofs.good() )
         return false;
     CHybridCipher c;
-    if ( ! c.readCfg ( ifs, privateKeyFile ) ||
+    if ( ! c.fReadCfg ( ifs, privateKeyFile ) ||
          ! c.init ( false ) || ! c.updateFile ( ifs, ofs ) )
         return false;
     return true;
 }
 
-
-
 #ifndef __PROGTEST__
 
-int main ( void )
-{
+int main ( void ) {
     assert( seal("fileToEncrypt", "sealed.bin", "PublicKey.pem", "aes-128-cbc") );
     assert( open("sealed.bin", "openedFileToEncrypt", "PrivateKey.pem") );
 
