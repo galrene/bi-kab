@@ -147,21 +147,21 @@ bool CHybridCipher::writeHeader ( ofstream & outFile ) {
         return false;
     stringstream ss;
 
-    ss << EVP_CIPHER_nid ( m_Cipher );
+    ss << setw(4) << EVP_CIPHER_nid ( m_Cipher );
     outFile.write ( ss.str().c_str(), ss.str().size() ); // write NID
-    ss.clear();
+    ss.str("");
 
-    ss << m_EncKeyLen;
+    ss << setw(4) << m_EncKeyLen;
     outFile.write ( ss.str().c_str(), ss.str().size() ); // write EKlen
-    ss.clear();
+    ss.str("");
 
     ss << m_EncKey;
     outFile.write ( ss.str().c_str(), ss.str().size() ); // write EK
-    ss.clear();
+    ss.str("");
 
     ss << m_IV;
     outFile.write ( ss.str().c_str(), ss.str().size() ); // write IV
-    ss.clear();
+    ss.str("");
 
     if ( ! outFile.good() )
         return false;
@@ -191,7 +191,7 @@ bool CHybridCipher::fReadCfg ( ifstream & inFile, const char * privateKeyFile ) 
     int nid = 0;
     if ( nid = stoi ( NID ); ! nid )
         return false;
-    if ( m_Cipher =  EVP_get_cipherbynid ( nid ); ! m_Cipher )
+    if ( m_Cipher = EVP_get_cipherbynid ( nid ); ! m_Cipher )
         return false;
 
     if ( m_EncKeyLen = stoi ( EKlen ); ! m_EncKeyLen )
@@ -199,9 +199,15 @@ bool CHybridCipher::fReadCfg ( ifstream & inFile, const char * privateKeyFile ) 
 
     m_EncKey = ( unsigned char * ) malloc ( m_EncKeyLen );
     inFile.read (reinterpret_cast<char *>(m_EncKey), m_EncKeyLen );
+    cout << inFile.gcount() << inFile.eof() << endl;
+    if ( inFile.gcount() != m_EncKeyLen )
+        return false;
 
-    if ( EVP_CIPHER_iv_length ( m_Cipher ) )
-        inFile.read (reinterpret_cast<char *>(m_IV), EVP_CIPHER_iv_length (m_Cipher ) );
+    if ( int ivLen = EVP_CIPHER_iv_length ( m_Cipher ); ivLen != 0 ) {
+        inFile.read (reinterpret_cast<char *>(m_IV), ivLen );
+        if ( inFile.gcount() != ivLen )
+            return false;
+    }
     return true;
 }
 
