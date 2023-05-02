@@ -146,24 +146,11 @@ bool CHybridCipher::init ( bool seal ) {
 bool CHybridCipher::writeHeader ( ofstream & outFile ) {
     if ( ! outFile.good() )
         return false;
-    stringstream ss;
-
-    ss << setw(4) << EVP_CIPHER_nid ( m_Cipher );
-    outFile.write ( ss.str().c_str(), ss.str().size() ); // write NID
-    ss.str("");
-
-    ss << setw(4) << m_EncKeyLen;
-    outFile.write ( ss.str().c_str(), ss.str().size() ); // write EKlen
-    ss.str("");
-
-    ss << m_EncKey;
-    outFile.write ( ss.str().c_str(), ss.str().size() ); // write EK
-    ss.str("");
-
-    ss << m_IV;
-    outFile.write ( ss.str().c_str(), ss.str().size() ); // write IV
-    ss.str("");
-
+    int nid = EVP_CIPHER_nid ( m_Cipher );
+    outFile.write ( (char*)&nid, sizeof(int) );
+    outFile.write ( (char*)&m_EncKeyLen, sizeof(int) );
+    outFile.write ( (char*)m_EncKey, m_EncKeyLen );
+    outFile.write ( (char*)m_IV, EVP_CIPHER_iv_length(m_Cipher) );
     if ( ! outFile.good() )
         return false;
     return true;
@@ -197,7 +184,6 @@ bool CHybridCipher::fReadCfg ( ifstream & inFile, const char * privateKeyFile ) 
 
     m_EncKey = ( unsigned char * ) malloc ( m_EncKeyLen );
     inFile.read (reinterpret_cast<char *>(m_EncKey), m_EncKeyLen );
-    cout << inFile.gcount() << inFile.eof() << endl;
     if ( inFile.gcount() != m_EncKeyLen )
         return false;
 
@@ -235,8 +221,8 @@ bool open ( const char * inFile, const char * outFile, const char * privateKeyFi
 #ifndef __PROGTEST__
 
 int main ( void ) {
-//    assert( seal("fileToEncrypt", "sealed.bin", "PublicKey.pem", "aes-128-cbc") );
-//    assert( open("sealed.bin", "openedFileToEncrypt", "PrivateKey.pem") );
+    assert( seal("fileToEncrypt", "sealed.bin", "PublicKey.pem", "aes-128-cbc") );
+    assert( open("sealed.bin", "openedFileToEncrypt", "PrivateKey.pem") );
 
     assert( open("sealed_sample.bin", "opened_sample.txt", "PrivateKey.pem") );
 
