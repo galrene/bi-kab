@@ -26,13 +26,8 @@ using namespace std;
 #define OUTBUFF_CAP ( INBUFF_CAP + EVP_MAX_BLOCK_LENGTH )
 
 struct TCryptoConfig {
-    const char * m_InFile;
-    const char * m_Outfile;
     const char * m_PemFile;
     const char * m_Cipher;
-    TCryptoConfig ( const char * inf, const char * outf, const char * pkf, const char * cipher )
-            : m_Cipher ( cipher ), m_InFile ( inf ), m_Outfile ( outf ), m_PemFile ( pkf )
-    {}
 };
 
 class CHybridCipher {
@@ -45,22 +40,25 @@ private:
     int m_EncKeyLen;
 
     EVP_PKEY * m_PKey;
-    ifstream m_Infile;
-    ofstream m_Outfile;
 public:
+    CHybridCipher ()
+    : m_Ctx ( NULL ), m_Cipher ( NULL ), m_Cfg (),
+      m_EncKey ( NULL ), m_EncKeyLen ( 0 ), m_PKey ( NULL ) {}
     explicit CHybridCipher ( const TCryptoConfig & cfg )
     : m_Ctx ( NULL ), m_Cipher ( NULL ), m_Cfg ( cfg ),
       m_EncKey ( NULL ), m_EncKeyLen ( 0 ), m_PKey ( NULL ) {}
 
     ~CHybridCipher();
 
-    bool updateFile ();
+    bool updateFile ( ifstream & inFile, ofstream & outFile );
 
-    bool init ();
+    bool init ( bool seal );
 
-    bool writeHeader();
+    bool writeHeader ( ofstream & outFile );
 
-    bool readHeader();
+    bool readCfg ( ifstream &inFile, const char *privateKeyFile );
+
+    bool fReadKey(const char *fileName, bool seal);
 };
 
 CHybridCipher::~CHybridCipher() {
@@ -68,57 +66,73 @@ CHybridCipher::~CHybridCipher() {
         EVP_PKEY_free ( m_PKey );
     if ( m_Ctx )
         EVP_CIPHER_CTX_free ( m_Ctx );
+    if ( m_EncKey )
+        free (m_EncKey );
 }
 
-bool CHybridCipher::updateFile () {
+bool CHybridCipher::updateFile ( ifstream & inFile, ofstream & outFile ) {
     char inBuff[INBUFF_CAP] = {};
     char outBuff[OUTBUFF_CAP] = {};
     int outSize = 0;
-    while ( m_Infile.good() && m_Outfile.good() ) {
-        m_Infile.read ( inBuff, INBUFF_CAP );
+    while ( inFile.good() && outFile.good() ) {
+        inFile.read ( inBuff, INBUFF_CAP );
         if ( ! EVP_SealUpdate (m_Ctx,
                                  reinterpret_cast<unsigned char *>(outBuff), &outSize,
-                                 reinterpret_cast<const unsigned char *>(inBuff), m_Infile.gcount() ) )
+                                 reinterpret_cast<const unsigned char *>(inBuff), inFile.gcount() ) )
             return false;
-        m_Outfile.write ( outBuff, outSize );
+        outFile.write ( outBuff, outSize );
     }
     // finished reading infile
-    if ( m_Infile.eof() ) {
+    if ( inFile.eof() ) {
         if ( ! EVP_SealFinal ( m_Ctx, reinterpret_cast<unsigned char *>(outBuff), &outSize ) )
             return false;
-        m_Outfile.write ( outBuff, outSize );
-        if ( ! m_Outfile.good() )
+        outFile.write ( outBuff, outSize );
+        if ( ! outFile.good() )
             return false;
         return true;
     }
     return false;
 }
 
-bool CHybridCipher::init () {
+bool CHybridCipher::fReadKey ( const char * fileName, bool publicKey ) {
+    if ( ! fileName )
+        return false;
+    FILE * pemFile = fopen ( fileName, "r" );
+    if ( ! pemFile )
+        return false;
+    if ( publicKey )
+        m_PKey = PEM_read_PUBKEY ( pemFile, NULL, NULL, NULL  );
+    else
+        m_PKey = PEM_read_PrivateKey ( pemFile, NULL, NULL, NULL );
+    fclose ( pemFile );
+    if ( ! m_PKey )
+        return false;
+    return true;
+}
+
+bool CHybridCipher::init ( bool seal ) {
     OpenSSL_add_all_ciphers();
-    if ( ! m_Cfg.m_InFile || ! m_Cfg.m_Outfile || ! m_Cfg.m_PemFile || ! m_Cfg.m_Cipher )
+    if ( ! m_Cfg.m_PemFile || ! m_Cfg.m_Cipher  )
         return false;
     if ( m_Ctx = EVP_CIPHER_CTX_new(); ! m_Ctx )
         return false;
     if ( m_Cipher = EVP_get_cipherbyname ( m_Cfg.m_Cipher ); ! m_Cipher )
         return false;
-    m_Infile.open ( m_Cfg.m_InFile ); m_Outfile.open ( m_Cfg.m_Outfile );
-    if ( ! m_Infile.good() || ! m_Outfile.good() )
+    if ( ! fReadKey ( m_Cfg.m_PemFile, seal ) )
         return false;
-    FILE * pkFile = fopen ( m_Cfg.m_PemFile, "r" );
-    if ( ! pkFile ) {
-        fclose ( pkFile );
-        return false;
+    if ( seal ) {
+        m_EncKey = ( unsigned char * ) malloc ( EVP_PKEY_size(m_PKey) );
+        if ( ! EVP_SealInit ( m_Ctx, m_Cipher,
+                              &m_EncKey, &m_EncKeyLen , m_IV,
+                              &m_PKey, 1 ) )
+            return false;
     }
-    m_PKey = PEM_read_PUBKEY ( pkFile, NULL, NULL, NULL  );
-    fclose ( pkFile );
-    if ( ! m_PKey )
-        return false;
-    // TODO: m_EncKey probably wrong
-    if ( ! EVP_SealInit ( m_Ctx, m_Cipher,
-                          &m_EncKey, &m_EncKeyLen , m_IV,
-                          &m_PKey, EVP_PKEY_size ( m_PKey ) ) )
-        return false;
+    else {
+        if ( ! EVP_OpenInit ( m_Ctx, m_Cipher,
+                              m_EncKey, m_EncKeyLen , m_IV,
+                              m_PKey ) )
+            return false;
+    }
     return true;
 }
 /**
@@ -129,28 +143,28 @@ bool CHybridCipher::init () {
     8 + EKlen 	        IVlen B 	pole unsigned char 	Inicializační vektor (pokud je potřeba)
     8 + EKlen + IVlen 	  —    	    pole unsigned char 	Zašifrovaná data
  */
-bool CHybridCipher::writeHeader() {
-    if ( ! m_Outfile.good() )
+bool CHybridCipher::writeHeader ( ofstream & outFile ) {
+    if ( ! outFile.good() )
         return false;
     stringstream ss;
 
     ss << EVP_CIPHER_nid ( m_Cipher );
-    m_Outfile.write ( ss.str().c_str(), ss.str().size() ); // write NID
+    outFile.write ( ss.str().c_str(), ss.str().size() ); // write NID
     ss.clear();
 
     ss << m_EncKeyLen;
-    m_Outfile.write ( ss.str().c_str(), ss.str().size() ); // write EKlen
+    outFile.write ( ss.str().c_str(), ss.str().size() ); // write EKlen
     ss.clear();
 
     ss << m_EncKey;
-    m_Outfile.write ( ss.str().c_str(), ss.str().size() ); // write EK
+    outFile.write ( ss.str().c_str(), ss.str().size() ); // write EK
     ss.clear();
 
     ss << m_IV;
-    m_Outfile.write ( ss.str().c_str(), ss.str().size() ); // write IV
+    outFile.write ( ss.str().c_str(), ss.str().size() ); // write IV
     ss.clear();
 
-    if ( ! m_Outfile.good() )
+    if ( ! outFile.good() )
         return false;
     return true;
 }
@@ -162,37 +176,54 @@ bool CHybridCipher::writeHeader() {
     8 + EKlen 	        IVlen B 	pole unsigned char 	Inicializační vektor (pokud je potřeba)
     8 + EKlen + IVlen 	  —    	    pole unsigned char 	Zašifrovaná data
  */
-bool CHybridCipher::readHeader () {
-    char NID[4] = {};
-    m_Infile.read ( NID, 4 );
-    if ( m_Infile.gcount() != 4 )
+bool CHybridCipher::readCfg ( ifstream & inFile, const char * privateKeyFile ) {
+    if ( ! inFile.good() || ! privateKeyFile )
         return false;
-    char EKlen[4] = {};
-    m_Infile.read ( EKlen, 4 );
-    if ( m_Infile.gcount() != 4 )
+
+    char NID[5] = {};
+    inFile.read ( NID, 4 );
+    if ( inFile.gcount() != 4 )
         return false;
+    char EKlen[5] = {};
+    inFile.read ( EKlen, 4 );
+    if ( inFile.gcount() != 4 )
+        return false;
+
     int nid = 0;
     if ( nid = stoi ( NID ); ! nid )
         return false;
+    if ( m_Cipher =  EVP_get_cipherbynid ( nid ); ! m_Cipher )
+        return false;
+
     int ekLen = 0;
     if ( ekLen = stoi ( EKlen ); ! ekLen )
         return false;
 
+    char * EK = new char[ekLen];
 
+    return true;
 }
 
 bool seal ( const char * inFile, const char * outFile, const char * publicKeyFile, const char * symmetricCipher ) {
-    CHybridCipher c ( { inFile, outFile, publicKeyFile, symmetricCipher } );
-    if ( ! c.init () || ! c.writeHeader() || ! c.updateFile() ) {
-        std::remove ( outFile ); // TODO: won't break things in destructors?
+    CHybridCipher c ( { publicKeyFile, symmetricCipher } );
+    ifstream ifs ( inFile ); ofstream ofs ( outFile );
+    if ( ! ifs.good() || ! ofs.good() )
+        return false;
+    if ( ! c.init ( true ) || ! c.writeHeader ( ofs ) || ! c.updateFile ( ifs, ofs ) ) {
+        std::remove ( outFile );
         return false;
     }
     return true;
 }
 
 bool open ( const char * inFile, const char * outFile, const char * privateKeyFile ) {
-    CHybridCipher c ( { inFile, outFile, privateKeyFile, NULL } );
-
+    ifstream ifs ( inFile ); ofstream ofs ( outFile );
+    if ( ! ifs.good() || ! ofs.good() )
+        return false;
+    CHybridCipher c;
+    if ( ! c.readCfg ( ifs, privateKeyFile ) ||
+         ! c.init ( false ) || ! c.updateFile ( ifs, ofs ) )
+        return false;
     return true;
 }
 
