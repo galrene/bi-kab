@@ -215,12 +215,16 @@ bool open ( const char * inFile, const char * outFile, const char * privateKeyFi
     if ( ! inFile || ! outFile || ! privateKeyFile )
         return false;
     ifstream ifs ( inFile ); ofstream ofs ( outFile );
-    if ( ! ifs.good() || ! ofs.good() )
+    if ( ! ifs.good() || ! ofs.good() ) {
+        std::remove(outFile);
         return false;
+    }
     CHybridCipher c;
     if ( ! c.fReadCfg ( ifs, privateKeyFile ) ||
-         ! c.init ( false ) || ! c.updateFile ( ifs, ofs ) )
+         ! c.init ( false ) || ! c.updateFile ( ifs, ofs ) ) {
+        std::remove(outFile);
         return false;
+    }
     return true;
 }
 
