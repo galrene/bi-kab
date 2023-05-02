@@ -42,7 +42,9 @@ private:
 public:
     CHybridCipher ()
     : m_Ctx ( NULL ), m_Cipher ( NULL ), m_Cfg (),
-      m_EncKey ( NULL ), m_EncKeyLen ( 0 ), m_PKey ( NULL ) {}
+      m_EncKey ( NULL ), m_EncKeyLen ( 0 ), m_PKey ( NULL ) {
+        OpenSSL_add_all_ciphers();
+    }
     explicit CHybridCipher ( const TCryptoConfig & cfg )
     : m_Ctx ( NULL ), m_Cipher ( NULL ), m_Cfg ( cfg ),
       m_EncKey ( NULL ), m_EncKeyLen ( 0 ), m_PKey ( NULL ) {}
@@ -110,7 +112,6 @@ bool CHybridCipher::fReadKey ( const char * fileName, bool publicKey ) {
 }
 
 bool CHybridCipher::init ( bool seal ) {
-    OpenSSL_add_all_ciphers();
     if ( ! m_Cfg.m_PemFile || ! m_Cfg.m_Cipher  )
         return false;
     if ( m_Ctx = EVP_CIPHER_CTX_new(); ! m_Ctx )
@@ -178,24 +179,21 @@ bool CHybridCipher::writeHeader ( ofstream & outFile ) {
 bool CHybridCipher::fReadCfg ( ifstream & inFile, const char * privateKeyFile ) {
     if ( ! inFile.good() || ! privateKeyFile )
         return false;
-
-    char NID[5] = {};
-    inFile.read ( NID, 4 );
-    if ( inFile.gcount() != 4 )
-        return false;
-    char EKlen[5] = {};
-    inFile.read ( EKlen, 4 );
-    if ( inFile.gcount() != 4 )
-        return false;
+    m_Cfg.m_PemFile = privateKeyFile;
 
     int nid = 0;
-    if ( nid = stoi ( NID ); ! nid )
-        return false;
-    if ( m_Cipher = EVP_get_cipherbynid ( nid ); ! m_Cipher )
+    inFile.read ( (char*)&nid, 4 );
+    if ( inFile.gcount() != 4 || nid == 0 )
         return false;
 
-    if ( m_EncKeyLen = stoi ( EKlen ); ! m_EncKeyLen )
+    m_EncKeyLen = 0;
+    inFile.read ( (char*)&m_EncKeyLen, 4 );
+    if ( inFile.gcount() != 4 || m_EncKeyLen == 0 )
         return false;
+
+    if ( m_Cipher = EVP_get_cipherbynid ( nid ); ! m_Cipher )
+        return false;
+    m_Cfg.m_Cipher = EVP_CIPHER_name (m_Cipher);
 
     m_EncKey = ( unsigned char * ) malloc ( m_EncKeyLen );
     inFile.read (reinterpret_cast<char *>(m_EncKey), m_EncKeyLen );
@@ -237,8 +235,8 @@ bool open ( const char * inFile, const char * outFile, const char * privateKeyFi
 #ifndef __PROGTEST__
 
 int main ( void ) {
-    assert( seal("fileToEncrypt", "sealed.bin", "PublicKey.pem", "aes-128-cbc") );
-    assert( open("sealed.bin", "openedFileToEncrypt", "PrivateKey.pem") );
+//    assert( seal("fileToEncrypt", "sealed.bin", "PublicKey.pem", "aes-128-cbc") );
+//    assert( open("sealed.bin", "openedFileToEncrypt", "PrivateKey.pem") );
 
     assert( open("sealed_sample.bin", "opened_sample.txt", "PrivateKey.pem") );
 
