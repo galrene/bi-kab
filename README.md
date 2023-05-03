@@ -1,3 +1,3 @@
-# template
+## Cryptography and Security Bachelor course
 
-Empty structure for lab tasks
+### FIT CVUT
